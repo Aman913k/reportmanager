@@ -31,13 +31,8 @@ var transactionDB = []models.Transaction{
 }
 
 func DownloadTransaction(c *gin.Context) {
-	// 1. Get authenticated user
+	// 1. Get authenticated user or report ID
 	idStr := c.Param("id")
-	userID, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id in path"})
-		return
-	}
 
 	// 2. Query parameters
 	startDate := c.Query("start_date")
@@ -52,6 +47,7 @@ func DownloadTransaction(c *gin.Context) {
 	var start, end time.Time
 	layout := "2006-01-02"
 	if startDate != "" {
+		var err error
 		start, err = time.Parse(layout, startDate)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid start_date format"})
@@ -62,6 +58,7 @@ func DownloadTransaction(c *gin.Context) {
 	}
 
 	if endDate != "" {
+		var err error
 		end, err = time.Parse(layout, endDate)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid end_date format"})
@@ -72,11 +69,7 @@ func DownloadTransaction(c *gin.Context) {
 		end = time.Now()
 	}
 
-	// 3. S3 Check: See if this report already exists
 	bucket := "my-pdf-storage-go"
-	// Create a stable key based on parameters (no timestamp for the check)
-	reportKey := fmt.Sprintf("statements/user_%d/statement_%s_to_%s.pdf", userID, start.Format("20060102"), end.Format("20060102"))
-
 	awsCfg, err := awsconfig.LoadDefaultConfig(context.TODO(), awsconfig.WithRegion("eu-north-1"))
 	if err != nil {
 		c.JSON(500, gin.H{"error": "aws config failed"})
@@ -84,18 +77,52 @@ func DownloadTransaction(c *gin.Context) {
 	}
 	s3Client := s3.NewFromConfig(awsCfg)
 
-	exists, _ := storage.CheckFileExistsInS3(s3Client, bucket, reportKey)
-	if exists {
-		downloadURL, err := storage.GeneratePresignedURL(s3Client, bucket, reportKey, 15*time.Minute)
+	// 3. Dual Check: Try ID as a direct Report ID first, then as a User ID
+	// Check for a specific report by ID
+	directReportKey := fmt.Sprintf("statements/report_%s.pdf", idStr)
+	exists, err := storage.CheckFileExistsInS3(s3Client, bucket, directReportKey)
+	if err == nil && exists {
+		downloadURL, err := storage.GeneratePresignedURL(s3Client, bucket, directReportKey, 15*time.Minute)
 		if err == nil {
 			c.JSON(http.StatusOK, gin.H{
-				"message":       "existing report found",
+				"message":       "existing report found by report id",
 				"download_url":  downloadURL,
 				"expires_in":    "15 minutes",
-				"s3_object_key": reportKey,
+				"s3_object_key": directReportKey,
 			})
 			return
 		}
+	}
+
+	// If not found, treat ID as User ID
+	userID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id (must be numeric for user statement)"})
+		return
+	}
+
+	// Create a stable key based on parameters
+	reportKey := fmt.Sprintf("statements/user_%d/statement_%s_to_%s.pdf", userID, start.Format("20060102"), end.Format("20060102"))
+
+	exists, err = storage.CheckFileExistsInS3(s3Client, bucket, reportKey)
+	if err != nil {
+		// Log error if it's not a "not found" error
+		fmt.Printf("S3 check error for key %s: %v\n", reportKey, err)
+	}
+
+	if exists {
+		downloadURL, err := storage.GeneratePresignedURL(s3Client, bucket, reportKey, 15*time.Minute)
+		if err != nil {
+			c.JSON(500, gin.H{"error": "failed to presign existing report: " + err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"message":       "existing report found",
+			"download_url":  downloadURL,
+			"expires_in":    "15 minutes",
+			"s3_object_key": reportKey,
+		})
+		return
 	}
 
 	// 4. Fetch transactions from in-memory DB
@@ -216,5 +243,38 @@ func getUserTransactions(userID int64, start, end time.Time, limit int) []models
 }
 
 func DownloadLedger(c *gin.Context) {
-	// Implementation for Ledger would follow a similar pattern
+	// 1. Get Ledger ID
+	ledgerID := c.Param("id")
+
+	// 2. Check S3 for existing ledger report
+	bucket := "my-pdf-storage-go"
+	ledgerKey := fmt.Sprintf("ledgers/ledger_%s.pdf", ledgerID)
+
+	awsCfg, err := awsconfig.LoadDefaultConfig(context.TODO(), awsconfig.WithRegion("eu-north-1"))
+	if err != nil {
+		c.JSON(500, gin.H{"error": "aws config failed"})
+		return
+	}
+	s3Client := s3.NewFromConfig(awsCfg)
+
+	exists, err := storage.CheckFileExistsInS3(s3Client, bucket, ledgerKey)
+	if err == nil && exists {
+		downloadURL, err := storage.GeneratePresignedURL(s3Client, bucket, ledgerKey, 15*time.Minute)
+		if err == nil {
+			c.JSON(http.StatusOK, gin.H{
+				"message":       "existing ledger report found",
+				"download_url":  downloadURL,
+				"expires_in":    "15 minutes",
+				"s3_object_key": ledgerKey,
+			})
+			return
+		}
+	}
+
+	// 3. If not found, we would normally fetch data and generate.
+	// For this demo, we'll return a 404 since we don't have a ledger generator yet.
+	c.JSON(http.StatusNotFound, gin.H{
+		"error":   "ledger report not found",
+		"message": "specific ledger reports must be pre-generated or requested via transaction statement",
+	})
 }

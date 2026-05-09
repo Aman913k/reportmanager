@@ -4,11 +4,13 @@ package storage
 import (
 	"bytes"
 	"context"
+	"errors"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/smithy-go"
 )
 
 func NewS3Client() (*s3.Client, error) {
@@ -42,7 +44,12 @@ func CheckFileExistsInS3(client *s3.Client, bucket, key string) (bool, error) {
 		Key:    &key,
 	})
 	if err != nil {
-		return false, nil // Assume it doesn't exist for simplicity, or handle specific 404 error
+		// In AWS SDK v2, we check if the error is a 404 (Not Found)
+		var apiErr smithy.APIError
+		if errors.As(err, &apiErr) && (apiErr.ErrorCode() == "NotFound" || apiErr.ErrorCode() == "NoSuchKey") {
+			return false, nil
+		}
+		return false, err
 	}
 	return true, nil
 }
