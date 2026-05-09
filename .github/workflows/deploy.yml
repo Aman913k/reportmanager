@@ -1,28 +1,40 @@
+# name: Go Build and Deploy
+
+# on:
+#   push:
+#     branches: [ "main" ] # Trigger only on pushes to main
+
+# jobs:
+#   build-and-deploy:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - name: Checkout code
+#         uses: actions/checkout@v4
+
+#       - name: Set up Go
+#         uses: actions/setup-go@v5
+#         with:
+#           go-version: '1.22' # Use your Go version
+
+#       - name: Build
+#         run: go build -v ./...
+
+#       - name: Run Tests
+#         run: go test -v ./...
+
+#       # This step tells Render to deploy ONLY if the Build and Tests pass
+#       - name: Deploy to Render
+#         if: success()
+#         run: curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK }}
+
 name: Go Build and Deploy
 
 on:
   push:
-    branches: [ "main" ] # Trigger only on pushes to main
+    branches: [ "main" ]
+  workflow_dispatch:      # <--- This line enables the manual button
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.22' # Use your Go version
-
-      - name: Build
-        run: go build -v ./...
-
-      - name: Run Tests
-        run: go test -v ./...
-
-      # This step tells Render to deploy ONLY if the Build and Tests pass
-      - name: Deploy to Render
-        if: success()
-        run: curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK }}
+    # ... (rest of your code stays the same)
