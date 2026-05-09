@@ -27,14 +27,29 @@
 #         if: success()
 #         run: curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK }}
 
+
 name: Go Build and Deploy
 
 on:
   push:
     branches: [ "main" ]
-  workflow_dispatch:      # <--- This line enables the manual button
+  workflow_dispatch:      # Enables the manual "Run workflow" button
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    # ... (rest of your code stays the same)
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build
+        run: go build -v ./...
+
+      - name: Deploy to Render
+        if: success()
+        run: curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK }}
