@@ -30,10 +30,13 @@
 
 name: Go Build and Deploy
 
+# on:
+#   push:
+#     branches: [ "main" ]
+#   workflow_dispatch:      # Enables the manual "Run workflow" button
+
 on:
-  push:
-    branches: [ "main" ]
-  workflow_dispatch:      # Enables the manual "Run workflow" button
+  workflow_dispatch: # Now it ONLY runs when you click the button
 
 jobs:
   build-and-deploy:
