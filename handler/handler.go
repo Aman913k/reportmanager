@@ -128,7 +128,7 @@ func DownloadTransaction(c *gin.Context) {
 	// 4. Fetch transactions from in-memory DB
 	transactions := getUserTransactions(userID, start, end, limit)
 	if len(transactions) == 0 {
-		c.JSON(http.StatusOK, gin.H{"message": "No transactions found for this period"})
+		c.JSON(http.StatusOK, gin.H{"message": "No transactions found!!"})
 		return
 	}
 
